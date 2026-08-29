@@ -1,0 +1,246 @@
+name: Monitor Casa Saturno — rodada automática
+
+# Esqueleto da coleta sem depender de máquina ligada (Passo 2 do plano).
+# Escopo desta rodada: YouTube (Data API v3) + regeneração e publicação do painel.
+# Instagram e TikTok continuam nas rodadas com navegador — exigem sessão logada.
+#
+# TOLERÂNCIA A INSUMO AUSENTE (regra de projeto): nenhum passo derruba o workflow
+# por falta de variável ou secret. Sem insumo → aviso no log e o passo é pulado
+# ou cai para o espelho versionado do próprio repo.
+
+on:
+  schedule:
+    - cron: "0 12 * * *"   # 12:00 UTC = 9h de Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monitor-rodada
+  cancel-in-progress: false
+
+jobs:
+  rodada:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencias
+        run: pip install --quiet openpyxl requests
+
+      # ------------------------------------------------------------------
+      # 1. BASE — espelho do OneDrive se houver; senao, o espelho do repo.
+      # ------------------------------------------------------------------
+      - name: Montar base_atual.xlsx
+        env:
+          ONEDRIVE_BASE_URL: ${{ vars.ONEDRIVE_BASE_URL }}
+        run: |
+          python - <<'PY'
+          import csv, os, sys
+          from openpyxl import Workbook, load_workbook
+
+          ALVO = "pipeline/base_atual.xlsx"
+          url = (os.environ.get("ONEDRIVE_BASE_URL") or "").strip()
+
+          def do_onedrive(url):
+              import requests
+              r = requests.get(url, timeout=60, allow_redirects=True)
+              r.raise_for_status()
+              open("/tmp/base_onedrive.xlsx", "wb").write(r.content)
+              wb = load_workbook("/tmp/base_onedrive.xlsx")
+              if "Posts" not in wb.sheetnames:
+                  raise ValueError("arquivo baixado nao tem aba Posts")
+              wb.save(ALVO)
+              return wb["Posts"].max_row - 1
+
+          def do_csv():
+              def conv(s):
+                  if s == "":
+                      return None
+                  try:
+                      return int(s)
+                  except ValueError:
+                      try:
+                          return float(s)
+                      except ValueError:
+                          return s
+              wb = Workbook(); wb.remove(wb.active)
+              for aba, arq in [("Posts", "posts"), ("Contadores", "contadores"),
+                               ("Leituras", "leituras"), ("Perfis", "perfis"),
+                               ("Metas", "metas")]:
+                  ws = wb.create_sheet(aba)
+                  caminho = "pipeline/base/%s.csv" % arq
+                  if not os.path.exists(caminho):
+                      continue
+                  with open(caminho, encoding="utf-8") as f:
+                      for i, row in enumerate(csv.reader(f)):
+                          ws.append([c if i == 0 else conv(c) for c in row])
+              wb.save(ALVO)
+              return wb["Posts"].max_row - 1
+
+          if url:
+              try:
+                  print("::notice::base do OneDrive: %d posts" % do_onedrive(url))
+                  sys.exit(0)
+              except Exception as e:
+                  print("::warning::falha ao usar ONEDRIVE_BASE_URL (%s) — caindo para o espelho do repo" % e)
+          else:
+              print("::warning::ONEDRIVE_BASE_URL nao definida — usando o espelho versionado pipeline/base/")
+          print("::notice::base do repo: %d posts" % do_csv())
+          PY
+
+      # ------------------------------------------------------------------
+      # 2. COLETA YOUTUBE — Data API v3. Sem secret, pula sem falhar.
+      #    Shorts SEMPRE pelo redirect /shorts/, nunca por duracao.
+      #    NAO mexe em Contadores: inscritos do YouTube nao sao mediveis aqui
+      #    e um carry escrito as 9h faria a rodada das 11h pular a medicao real
+      #    do dia (aplicar_contadores ignora perfil que ja tem linha de hoje).
+      # ------------------------------------------------------------------
+      - name: Coleta YouTube e aplicacao na base
+        env:
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+        run: |
+          python - <<'PY'
+          import csv, datetime, os, sys, zoneinfo
+          sys.path.insert(0, "pipeline")
+
+          chave = (os.environ.get("YT_API_KEY") or "").strip()
+          if not chave:
+              print("::warning::secret YT_API_KEY ausente — coleta do YouTube pulada nesta rodada")
+              sys.exit(0)
+
+          import requests
+          import saturno
+          from saturno import Base, Post
+
+          # A Data API entrega os mesmos numeros oficiais do RSS: mesma politica de
+          # confianca. Registrada aqui ate o saturno.py ganhar a fonte formalmente.
+          saturno.FONTES["yt_api"] = {"views": True, "leituras": True}
+
+          TZ = zoneinfo.ZoneInfo("America/Sao_Paulo")
+          agora = datetime.datetime.now(TZ)
+          COLETA = agora.strftime("%Y-%m-%d %H:%M")
+          HOJE = agora.strftime("%Y-%m-%d")
+          API = "https://www.googleapis.com/youtube/v3"
+
+          canais = []
+          with open("pipeline/base/perfis.csv", encoding="utf-8") as f:
+              for r in csv.DictReader(f):
+                  artista = r.get("Artista") or r.get("Artista/Perfil")
+                  cid = str(r.get("ID tecnico") or r.get("ID técnico") or "")
+                  if r.get("Plataforma") == "YouTube" and r.get("Monitorar?") == "Sim" \
+                     and cid.startswith("UC"):
+                      canais.append((artista, cid))
+          print("::notice::canais de YouTube monitorados: %d" % len(canais))
+
+          base = Base("pipeline/base_atual.xlsx")
+          conhecidos = {k[2] for k in base.idx}
+          coletados = []
+
+          for artista, cid in canais:
+              try:
+                  pl = requests.get(API + "/playlistItems", timeout=30, params={
+                      "part": "contentDetails", "playlistId": "UU" + cid[2:],
+                      "maxResults": 15, "key": chave}).json()
+                  ids = [i["contentDetails"]["videoId"] for i in pl.get("items", [])]
+                  if not ids:
+                      print("::warning::%s: playlist de uploads vazia" % artista)
+                      continue
+                  vs = requests.get(API + "/videos", timeout=30, params={
+                      "part": "snippet,statistics", "id": ",".join(ids),
+                      "key": chave}).json()
+              except Exception as e:
+                  print("::warning::%s: falha na Data API (%s)" % (artista, e))
+                  continue
+
+              for v in vs.get("items", []):
+                  vid = v["id"]
+                  st = v.get("statistics", {})
+                  sn = v["snippet"]
+                  pub = datetime.datetime.fromisoformat(
+                      sn["publishedAt"].replace("Z", "+00:00")).astimezone(TZ)
+                  tipo = None
+                  if vid not in conhecidos:
+                      try:   # classificacao de formato: so pelo redirect
+                          fin = requests.get("https://www.youtube.com/shorts/" + vid,
+                                             timeout=20, allow_redirects=True).url
+                          tipo = "Short" if "/shorts/" in fin else "Vídeo longo"
+                      except Exception:
+                          print("::warning::%s: redirect /shorts/ falhou — post novo adiado" % vid)
+                          continue   # sem classificacao confiavel, nao insere
+                  coletados.append(Post(
+                      artista, "YouTube", pub.strftime("%Y-%m-%d"), pub.strftime("%H:%M"),
+                      tipo, vid, titulo=sn.get("title"), url="https://youtu.be/" + vid,
+                      views=int(st["viewCount"]) if "viewCount" in st else None,
+                      likes=int(st["likeCount"]) if "likeCount" in st else None,
+                      coment=int(st["commentCount"]) if "commentCount" in st else None,
+                      fonte="yt_api"))
+
+          if not coletados:
+              print("::warning::nenhum video coletado — base inalterada")
+              sys.exit(0)
+
+          base.aplicar_posts(coletados, COLETA)
+          base.aplicar_leituras(coletados, COLETA, HOJE)
+          base.salvar(csv_dir="pipeline/base")
+          print("::notice::" + base.resumo())
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write("COLETA=%s\nHOJE=%s\n" % (COLETA, HOJE))
+          PY
+
+      # ------------------------------------------------------------------
+      # 3. PAINEL — regen.py com COLETA/HOJE desta rodada.
+      # ------------------------------------------------------------------
+      - name: Regenerar index.html
+        run: |
+          python - <<'PY'
+          import datetime, os, re, shutil, subprocess, zoneinfo
+          TZ = zoneinfo.ZoneInfo("America/Sao_Paulo")
+          agora = datetime.datetime.now(TZ)
+          coleta = os.environ.get("COLETA") or agora.strftime("%Y-%m-%d %H:%M")
+          hoje = os.environ.get("HOJE") or agora.strftime("%Y-%m-%d")
+
+          src = open("pipeline/regen.py", encoding="utf-8").read()
+          src = re.sub(r'COLETA="[^"]*"', 'COLETA="%s"' % coleta, src)
+          src = re.sub(r'HOJE="[^"]*"', 'HOJE="%s"' % hoje, src)
+          open("pipeline/_regen_run.py", "w", encoding="utf-8").write(src)
+
+          out = subprocess.run(["python", "_regen_run.py"], cwd="pipeline",
+                               capture_output=True, text=True)
+          print(out.stdout.strip() or out.stderr.strip())
+          out.check_returncode()
+
+          shutil.move("pipeline/index.html", "index.html")
+          for lixo in ("pipeline/_regen_run.py", "pipeline/base_atual.xlsx",
+                       "pipeline/painel_casa_saturno.html"):
+              if os.path.exists(lixo):
+                  os.remove(lixo)
+          PY
+
+      # ------------------------------------------------------------------
+      # 4. COMMIT — so se houver mudanca real. Pull antes de escrever;
+      #    conflito derruba o job de proposito (erro visivel).
+      # ------------------------------------------------------------------
+      - name: Commit e push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html pipeline/base
+          if git diff --cached --quiet; then
+            echo "::notice::nada mudou — sem commit"
+          elif [ -z "${COLETA:-}" ] && git diff --cached --quiet -- pipeline/base; then
+            echo "::notice::sem coleta e base inalterada — so o carimbo do painel mudaria; sem commit"
+            git reset --quiet
+          else
+            git commit -m "Rodada automatica (Actions) — ${COLETA:-$(date -u +'%F %H:%M')} UTC"
+            git pull --rebase
+            git push
+          fi
