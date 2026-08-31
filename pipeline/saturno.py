@@ -186,9 +186,19 @@ class Base:
 
     # -- contadores --------------------------------------------------------
     def aplicar_contadores(self, medidos, hoje):
-        """medidos: dict {(artista,plataforma): Contador}. O resto vira carry marcado."""
+        """medidos: dict {(artista,plataforma): Contador}. O resto vira carry marcado.
+
+        MEDIDO SOBRESCREVE, CARRY NUNCA (regra 2). Uma medicao real sempre entra,
+        mesmo que ja exista linha de hoje: nesse caso a linha do dia e REESCRITA
+        no lugar, sem duplicar. Sem medicao, uma linha de hoje ja existente e
+        PRESERVADA — carry e seed jamais rebaixam o que ja foi medido.
+
+        Sem isso, a primeira rodada do dia decidia o dia inteiro: um carry escrito
+        as 9h impedia a medicao real das 14h de ser gravada (caso observado em
+        31/08/2026, entre duas rodadas separadas por 13 minutos).
+        """
         ws = self.wb["Contadores"]
-        ultimo = {}
+        ultimo, linha_hoje = {}, {}
         for r in range(2, ws.max_row + 1):
             d = str(ws.cell(row=r, column=1).value)[:10]
             if not d or d == "None": continue
@@ -199,9 +209,15 @@ class Base:
                                 ws.cell(row=r, column=6).value,
                                 ws.cell(row=r, column=7).value,
                                 ws.cell(row=r, column=self._col_origem).value)
+            if d == hoje:
+                linha_hoje[k] = r
         for k, v in ultimo.items():
-            if v[0] == hoje: continue
             m = medidos.get((k[0], k[1]))
+            r_hoje = linha_hoje.get(k)
+            if r_hoje and not m:
+                # ja ha linha de hoje e nada novo foi medido: nao rebaixa
+                self.stats["contadores_preservados"] += 1
+                continue
             if m:
                 seg, posts, likes, origem = m.seguidores, m.posts, (m.likes or v[3]), "medido"
                 self.stats["contadores_medidos"] += 1
@@ -210,7 +226,11 @@ class Base:
                 origem = "seed" if v[4] == "seed" else "carry"
                 seg, posts, likes = v[1], v[2], v[3]
                 self.stats[f"contadores_{origem}"] += 1
-            r = ws.max_row + 1
+            if r_hoje:
+                r = r_hoje
+                self.stats["contadores_reescritos"] += 1
+            else:
+                r = ws.max_row + 1
             for c, val in enumerate([hoje, k[0], k[1], k[2], seg, posts, likes], start=1):
                 cl = ws.cell(row=r, column=c, value=val); cl.font = _B; cl.border = _BD
             cl = ws.cell(row=r, column=self._col_origem, value=origem)
@@ -266,9 +286,56 @@ class Base:
         s = self.stats
         return (f"atualizados={s['atualizados']} inseridos={s['inseridos']} "
                 f"leituras+={s['leituras']} | contadores: medido={s['contadores_medidos']} "
-                f"carry={s['contadores_carry']} seed={s['contadores_seed']} | "
+                f"carry={s['contadores_carry']} seed={s['contadores_seed']} "
+                f"reescritos={s['contadores_reescritos']} preservados={s['contadores_preservados']} | "
                 f"views de fallback descartadas={s['views_descartadas_fallback']} | "
                 f"leituras bloqueadas={s['leituras_bloqueadas']}")
+
+
+# ---------------------------------------------------------------- carga
+
+def _valor(txt):
+    """Converte texto do CSV para o tipo certo — SEM destruir identificadores.
+
+    REGRA 5: ID NUNCA VIRA NUMERO. Um id de video do TikTok tem 19 digitos e
+    nao cabe no double que o Excel usa: 7415771173155343621 volta como
+    7.415771173155343e+18. Isso quebra a chave do upsert e faz cada rodada
+    reinserir todos os videos como se fossem novos. Qualquer sequencia de mais
+    de 15 digitos fica como texto.
+    """
+    if txt == "":
+        return None
+    if txt.isdigit() and len(txt) > 15:
+        return txt
+    try:
+        return int(txt)
+    except ValueError:
+        try:
+            return float(txt)
+        except ValueError:
+            return txt
+
+
+def carregar_base_dos_csv(dir_csv, destino):
+    """Monta o .xlsx de trabalho a partir do espelho CSV versionado.
+
+    Use SEMPRE esta funcao em vez de reimplementar a conversao no chamador:
+    a regra de nao numerizar ids precisa valer para todo mundo.
+    """
+    from openpyxl import Workbook
+    import os
+    wb = Workbook(); wb.remove(wb.active)
+    for aba, arq in (("Posts","posts"), ("Contadores","contadores"),
+                     ("Leituras","leituras"), ("Perfis","perfis"), ("Metas","metas")):
+        ws = wb.create_sheet(aba)
+        caminho = os.path.join(dir_csv, arq + ".csv")
+        if not os.path.exists(caminho):
+            continue
+        with open(caminho, encoding="utf-8") as f:
+            for i, linha in enumerate(csv.reader(f)):
+                ws.append([c if i == 0 else _valor(c) for c in linha])
+    wb.save(destino)
+    return destino
 
 
 # ---------------------------------------------------------------- helpers
