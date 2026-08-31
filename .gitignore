@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+
+# artefatos de trabalho da rodada (gerados e descartados a cada execucao)
+pipeline/base_atual.xlsx
+pipeline/_regen_run.py
+pipeline/painel_casa_saturno.html
