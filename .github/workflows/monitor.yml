@@ -48,7 +48,8 @@ jobs:
           ONEDRIVE_BASE_URL: ${{ vars.ONEDRIVE_BASE_URL }}
         run: |
           python - <<'PY'
-          import csv, os, shutil
+          import csv, os, shutil, sys
+          sys.path.insert(0, "pipeline")
           from openpyxl import Workbook, load_workbook
 
           ALVO = "pipeline/base_atual.xlsx"
@@ -81,30 +82,13 @@ jobs:
                   f.write(r.content)
               return destino
 
+          # A conversao vive no saturno.py (regra 5: id nunca vira numero — um id
+          # de 19 digitos do TikTok nao cabe no double do Excel e voltaria como
+          # 7.4e+18, quebrando a chave do upsert).
+          from saturno import carregar_base_dos_csv
+
           def montar_do_repo(destino):
-              def conv(s):
-                  if s == "":
-                      return None
-                  try:
-                      return int(s)
-                  except ValueError:
-                      try:
-                          return float(s)
-                      except ValueError:
-                          return s
-              wb = Workbook(); wb.remove(wb.active)
-              for aba, arq in [("Posts", "posts"), ("Contadores", "contadores"),
-                               ("Leituras", "leituras"), ("Perfis", "perfis"),
-                               ("Metas", "metas")]:
-                  ws = wb.create_sheet(aba)
-                  caminho = "pipeline/base/%s.csv" % arq
-                  if not os.path.exists(caminho):
-                      continue
-                  with open(caminho, encoding="utf-8") as f:
-                      for i, row in enumerate(csv.reader(f)):
-                          ws.append([c if i == 0 else conv(c) for c in row])
-              wb.save(destino)
-              return destino
+              return carregar_base_dos_csv("pipeline/base", destino)
 
           candidatos = []
 
