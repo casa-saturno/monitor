@@ -99,6 +99,29 @@ a{color:inherit}
 .gtrack{height:11px;display:flex;align-items:center}
 .gfill{height:11px;border-radius:0 3px 3px 0;min-width:2px}
 .gval{font-size:11.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;text-align:right}
+
+/* saude da coleta */
+.saudegrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.sd{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--page)}
+.sd .top{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.sd .dot{width:9px;height:9px;border-radius:2px;flex:none}
+.sd .nome{font-size:13px;font-weight:600}
+.sd .quando{font-size:22px;font-weight:650;line-height:1.05;font-variant-numeric:tabular-nums}
+.sd .det{font-size:11.5px;color:var(--ink-3);margin-top:5px}
+.sd .est{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;margin-top:9px;
+         padding:3px 9px;border-radius:20px;color:var(--ink-1);
+         background:color-mix(in srgb,var(--c) 16%,transparent);
+         border:1px solid color-mix(in srgb,var(--c) 45%,transparent)}
+.sd .est .ic{font-size:10.5px;line-height:1;color:var(--c)}
+.est.ok{--c:var(--good)} .est.wa{--c:var(--warning)}
+.est.se{--c:var(--serious)} .est.cr{--c:var(--critical)}
+/* lancamentos */
+.lanc td.mk{font-variant-numeric:tabular-nums}
+.lanc .vazio{color:var(--ink-3)}
+.lanc td:first-child{max-width:320px}
+.lanc .tit,.lanc .art{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lanc .art{font-size:11.5px;color:var(--ink-3)}
+@media(max-width:600px){.lanc td:first-child{max-width:150px}}
 </style>
 </head>
 <body>
@@ -120,6 +143,7 @@ a{color:inherit}
     <button class="chip on" data-v="*">Todas</button>
     <button class="chip" data-v="YouTube">YouTube</button>
     <button class="chip" data-v="Instagram">Instagram</button>
+    <button class="chip" data-v="TikTok">TikTok</button>
   </div>
   <span class="lbl">Formato</span>
   <div class="chipset" id="fFmt">
@@ -133,6 +157,12 @@ a{color:inherit}
 </div>
 
 <div class="kpis" id="kpis"></div>
+
+<div class="card">
+  <h2>Saúde da coleta</h2>
+  <div class="hint">Quando cada plataforma foi lida pela última vez. As rodadas correm 2× por dia; silêncio prolongado aqui significa que os números abaixo estão velhos, não que a produção parou.</div>
+  <div class="saudegrid" id="saude"></div>
+</div>
 
 <div class="card">
   <h2>Adesão — posts por dia</h2>
@@ -160,6 +190,13 @@ a{color:inherit}
   <h2>Top posts do período</h2>
   <div class="hint">Ranqueado por views (leitura de <span id="topColeta"></span>). Colabs contam uma vez, creditando os perfis envolvidos.</div>
   <div class="toplist" id="topPosts"></div>
+</div>
+
+<div class="card">
+  <h2>Lançamentos — primeiras 72h</h2>
+  <div class="hint">Views acumuladas de cada post nas primeiras horas, para comparar arranque. Como as rodadas não caem exatamente no marco, vale a leitura mais próxima dentro de 8h; sem leitura na janela, a célula fica vazia — em vez de um número que finge precisão.</div>
+  <div style="overflow-x:auto"><table class="lanc" id="tabLanc"></table></div>
+  <div class="footnote" id="lancNote"></div>
 </div>
 
 <div class="card">
@@ -196,7 +233,7 @@ a{color:inherit}
 </div>
 
 <div class="footnote">
-  TikTok: sem login no perfil, a plataforma só expõe os contadores (seguidores, nº de vídeos, curtidas) — a frequência de posts no TikTok é acompanhada pela variação diária do contador, na tabela de audiência. ·
+  TikTok: a grade do perfil expõe views por vídeo, mas não likes nem comentários, e arredonda acima de mil (2,8 mi). A coleta é lenta — poucos perfis por rodada, em rodízio —, então o TikTok tende a estar menos atualizado que as outras plataformas; o bloco de saúde no topo mostra o quanto. ·
   Views de fotos e carrosséis não são expostas pelo Instagram (aparecem como “—”). ·
   Cobertura do histórico inicial: últimos 15 vídeos por canal (YouTube) e ~24 posts por perfil (Instagram); dias anteriores ao início da cobertura de um perfil aparecem esmaecidos no calendário.
 </div>
@@ -551,9 +588,65 @@ function tabela(){
   });
 }
 
+// ---------- Saude da coleta ----------
+function saude(){
+  const agora=new Date(DB.coleta.replace(" ","T"));
+  $("saude").innerHTML=(DB.saude||[]).map(s=>{
+    const h = s.ul ? (agora-new Date(s.ul.replace(" ","T")))/36e5 : null;
+    let est,cls,ic;
+    if(h===null)      {est="sem leitura";    cls="cr"; ic="\u2715";}
+    else if(h<=26)    {est="em dia";         cls="ok"; ic="\u2713";}
+    else if(h<=50)    {est="atrasado";       cls="wa"; ic="!";}
+    else if(h<=120)   {est="muito atrasado"; cls="se"; ic="!!";}
+    else              {est="parado";         cls="cr"; ic="\u2715";}
+    const quando = h===null ? "\u2014"
+      : h<1  ? "agora h\u00e1 pouco"
+      : h<24 ? "h\u00e1 "+Math.round(h)+"h"
+      : "h\u00e1 "+Math.floor(h/24)+"d "+Math.round(h%24)+"h";
+    const carimbo = s.ul ? dshort(s.ul.slice(0,10))+" "+s.ul.slice(11) : "nunca lido";
+    return `<div class="sd"><div class="top"><span class="dot" style="background:${PCOL[s.p]||"var(--ink-3)"}"></span><span class="nome">${s.p}</span></div>`
+      + `<div class="quando">${quando}</div>`
+      + `<div class="det">${carimbo} \u00b7 ${fmtI(s.n)} posts na base</div>`
+      + `<div class="est ${cls}"><span class="ic">${ic}</span>${est}</div></div>`;
+  }).join("") || `<div class="det">sem dados de leitura</div>`;
+}
+
+// ---------- Lancamentos: primeiras 72h ----------
+function lancamentos(){
+  // colabs: um post aparece uma vez, creditando os perfis envolvidos (como no Top posts)
+  const bruto=(DB.lanc||[]).filter(x=>(F.plat==="*"||x.p===F.plat) && (F.art==="*"||x.a===F.art));
+  const m={}; bruto.forEach(x=>{
+    const k=x.p+"|"+x.id;
+    if(!m[k]) m[k]={...x, perfis:[x.a]};
+    else { m[k].perfis.push(x.a);
+           m[k].v=Math.max(m[k].v,x.v);
+           m[k].mh=(m[k].m||[]).map((v,i)=> v==null?(x.mh||[])[i]:(m[k].mh||[])[i]);
+           m[k].m=m[k].m.map((v,i)=> v==null?x.m[i] : (x.m[i]==null?v:Math.max(v,x.m[i]))); }
+  });
+  const L=Object.values(m).sort((a,b)=>(b.m[0]||0)-(a.m[0]||0));
+  // a leitura raramente cai no marco exato: o title diz a idade real, para o
+  // numero nunca fingir uma precisao que a cadencia das rodadas nao permite
+  const cel=(v,i)=> v==null ? `<td class="num mk vazio">\u2014</td>`
+    : `<td class="num mk" title="leitura feita ${i}h ap\u00f3s a publica\u00e7\u00e3o">${fmtI(v)}</td>`;
+  const linhas=L.slice(0,25).map(x=>{
+    const tit=x.ti||x.id;
+    return `<tr><td><a href="${x.u}" target="_blank" rel="noopener"><span class="tit">${tit}</span></a>`
+      + `<span class="art"><span class="dot" style="display:inline-block;width:7px;height:7px;border-radius:2px;background:${PCOL[x.p]};margin-right:5px"></span>${(x.perfis||[x.a]).join(" + ")} \u00b7 ${x.t||""}</span></td>`
+      + `<td class="num">${dshort(x.d)} ${x.h}</td>` + cel(x.m[0],(x.mh||[])[0]) + cel(x.m[1],(x.mh||[])[1]) + cel(x.m[2],(x.mh||[])[2])
+      + `<td class="num mk">${fmtI(x.v)}</td></tr>`;
+  }).join("");
+  $("tabLanc").innerHTML = L.length
+    ? `<thead><tr><th>Post</th><th class="num">Publicado</th><th class="num">24h</th><th class="num">48h</th><th class="num">72h</th><th class="num">Agora</th></tr></thead><tbody>${linhas}</tbody>`
+    : `<tbody><tr><td class="vazio">Nenhum lan\u00e7amento com leitura de trajet\u00f3ria no filtro atual.</td></tr></tbody>`;
+  const comple=L.filter(x=>x.m[0]!=null).length;
+  $("lancNote").textContent = L.length
+    ? `${L.length} posts dos \u00faltimos 7 dias com trajet\u00f3ria registrada \u00b7 ${comple} j\u00e1 com marco de 24h \u00b7 ordenado pelo arranque de 24h.`
+    : "";
+}
+
 // ---------- Render geral ----------
 function render(){
-  kpis();heatmap();freq();medViews();relViews();topPosts();insights();horarios();contadores();tabela();
+  saude();kpis();heatmap();freq();medViews();relViews();topPosts();lancamentos();insights();horarios();contadores();tabela();
   const {ini,fim}=periodo();
   $("subinfo").textContent=`Período: ${dshort(ini)} a ${dshort(fim)} · Última coleta: ${DB.coleta.slice(8,10)}/${DB.coleta.slice(5,7)} ${DB.coleta.slice(11)}`;
   $("topColeta").textContent=DB.coleta.slice(8,10)+"/"+DB.coleta.slice(5,7)+" "+DB.coleta.slice(11);
