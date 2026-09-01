@@ -590,15 +590,28 @@ function tabela(){
 
 // ---------- Saude da coleta ----------
 function saude(){
-  const agora=new Date(DB.coleta.replace(" ","T"));
+  // A idade e medida contra a hora de QUEM ESTA OLHANDO, nao contra o carimbo
+  // gravado no arquivo. Medir contra DB.coleta congela o bloco: uma pagina
+  // gerada ontem diria "ha 3h, em dia" para sempre — exatamente a falsa
+  // tranquilidade que este bloco existe para eliminar.
+  // Os carimbos da base nao trazem fuso; sao sempre horario de Brasilia.
+  const brt = t => new Date(t.replace(" ","T")+"-03:00");
+  const agora = new Date();
   $("saude").innerHTML=(DB.saude||[]).map(s=>{
-    const h = s.ul ? (agora-new Date(s.ul.replace(" ","T")))/36e5 : null;
+    const h = s.ul ? (agora-brt(s.ul))/36e5 : null;
     let est,cls,ic;
-    if(h===null)      {est="sem leitura";    cls="cr"; ic="\u2715";}
-    else if(h<=26)    {est="em dia";         cls="ok"; ic="\u2713";}
-    else if(h<=50)    {est="atrasado";       cls="wa"; ic="!";}
-    else if(h<=120)   {est="muito atrasado"; cls="se"; ic="!!";}
-    else              {est="parado";         cls="cr"; ic="\u2715";}
+    // Cada plataforma tem a sua cadencia, entao cada uma tem o seu limiar.
+    // Instagram e TikTok saem nas rodadas de navegador (11h00 e 19h10), que
+    // deixam no maximo ~16h de intervalo: passar de 18h significa rodada
+    // perdida. O YouTube sai do Actions, 1x por dia, e o agendador do GitHub
+    // atrasa bastante (em 30/08 rodou quase 7h depois da hora) — cobrar dele
+    // o mesmo ritmo acusaria falha toda manha sem falha nenhuma.
+    const CAD = {Instagram:18, TikTok:18, YouTube:30}[s.p] || 24;
+    if(h===null)        {est="sem leitura";     cls="cr"; ic="\u2715";}
+    else if(h<=CAD)     {est="em dia";          cls="ok"; ic="\u2713";}
+    else if(h<=CAD*1.7) {est="rodada perdida";  cls="wa"; ic="!";}
+    else if(h<=CAD*4)   {est="muito atrasado";  cls="se"; ic="!!";}
+    else                {est="parado";          cls="cr"; ic="\u2715";}
     const quando = h===null ? "\u2014"
       : h<1  ? "agora h\u00e1 pouco"
       : h<24 ? "h\u00e1 "+Math.round(h)+"h"
