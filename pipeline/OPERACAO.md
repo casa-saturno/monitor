@@ -71,3 +71,34 @@ Review para contas próprias (Instagram API with Instagram Login, escopos
 dependência do computador ligado. Custos: contas precisam ser profissionais, cada uma
 autorizada por quem a administra, token de 60 dias com renovação automatizada, e
 insights podendo atrasar até 48h — o que precisa ser medido antes de confiar.
+
+## TikTok — o que funciona e o que não funciona (02/09/2026)
+
+A **grade de vídeos não hidrata mais**. `[data-e2e="user-post-item"]` fica em 0
+em todos os 9 perfis, mesmo com o header já carregado e mesmo esperando 30s.
+`api/post/item_list/` responde **200 com corpo vazio** — é o bloqueio do TikTok
+a requisição sem assinatura, não um erro de rede. Não gaste rodadas nisso.
+
+O que **funciona**: o blob `__UNIVERSAL_DATA_FOR_REHYDRATION__` da página do
+perfil, em `__DEFAULT_SCOPE__["webapp.user-detail"].userInfo.stats` —
+`followerCount`, `videoCount`, `heartCount`, exatos. Navegue para
+`tiktok.com/@<handle>`, espere ~9s, leia o blob; um ERR na primeira tentativa
+costuma passar na segunda.
+
+Não use os números do DOM (`[data-e2e="followers-count"]` devolve "264.6K",
+arredondado) — um contador arredondado gravado como `medido` é pior do que um
+carry honesto.
+
+Handles: acasasaturno, oikysha, aminequerida_, evybaddiee, orussindomolejo,
+oiargentino_, oiikaka__, oifidelisx, kyshaeminee.
+
+Resultado: desde 02/09 os contadores de TikTok voltaram a ser `medido` nos 9
+perfis — eram carry havia semanas. Só a série de **posts** do TikTok segue
+parada.
+
+## Horários das rodadas
+
+- 11h00 (14:00 UTC) — rodada da manhã.
+- 18h10 (21:10 UTC) — rodada da noite. Era 19h10 até 02/09; mudou porque o
+  computador estava desligado nas três tentativas (30/08, 31/08, 01/09).
+- Actions: cron 12:00 UTC, só YouTube pela Data API.
