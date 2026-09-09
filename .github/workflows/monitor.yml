@@ -214,6 +214,17 @@ jobs:
           PY
 
       # ------------------------------------------------------------------
+      # 2b. COLETA TIKTOK — endpoints de embed, sem sessao nem assinatura
+      #     (pipeline/coletar_tiktok.py). Posts + leituras + contadores.
+      #     Falha de rede vira aviso; o passo nunca derruba a rodada.
+      #     Contadores: "medido sobrescreve, carry nunca" ja vale no nucleo,
+      #     entao uma medicao do Instagram mais tarde no dia entra normalmente.
+      # ------------------------------------------------------------------
+      - name: Coleta TikTok (embed) e aplicacao na base
+        continue-on-error: true
+        run: python pipeline/coletar_tiktok.py
+
+      # ------------------------------------------------------------------
       # 3. PAINEL — regen.py com COLETA/HOJE desta rodada.
       # ------------------------------------------------------------------
       - name: Regenerar index.html
