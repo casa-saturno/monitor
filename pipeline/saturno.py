@@ -43,6 +43,16 @@ FONTES = {
     "ig_feed":     {"views": True,  "leituras": True},
     "ig_fallback": {"views": False, "leituras": False},   # regra 1 e 3
     "tk_scrape":   {"views": True,  "leituras": True},
+    # embed publico do TikTok (coletar_tiktok.py): sem sessao; exato < 10k,
+    # 3 algarismos significativos acima — mesma precisao do blob da pagina
+    "tk_embed":    {"views": True,  "leituras": True},
+    # Data API v3 do YouTube (workflow): numeros oficiais, mesma politica do RSS
+    "yt_api":      {"views": True,  "leituras": True},
+    # arvore React da pagina de perfil do Instagram (coletar_instagram.py):
+    # likes/comentarios exatos, views so quando a pagina os entrega
+    "ig_pagina":   {"views": True,  "leituras": True},
+    # API oficial (Instagram API with Instagram Login) — numeros oficiais
+    "ig_api":      {"views": True,  "leituras": True},
 }
 
 # regra 4 — Casa Saturno primeiro: é o perfil de maior volume e o que mais falha
@@ -219,7 +229,11 @@ class Base:
                 self.stats["contadores_preservados"] += 1
                 continue
             if m:
-                seg, posts, likes, origem = m.seguidores, m.posts, (m.likes or v[3]), "medido"
+                # fonte que nao expoe total de posts (embed do TikTok) nao apaga o
+                # ultimo valor conhecido — so seguidores e o que define "medido"
+                seg = m.seguidores
+                posts = m.posts if m.posts is not None else v[2]
+                likes, origem = (m.likes or v[3]), "medido"
                 self.stats["contadores_medidos"] += 1
             else:
                 # nunca medido continua seed; medido antes vira carry

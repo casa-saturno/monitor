@@ -48,10 +48,22 @@ Instagram e TikTok. Alimenta o painel em https://casa-saturno.github.io/monitor/
 
 ## Contrato da rodada
 
-1. Carrega a base (fonte de verdade = este repositório).
-2. Coleta: YouTube por RSS; Instagram por `/api/v1/feed/user/<uid>` com sessão
-   logada, caindo para `web_profile_info` quando houver 401; TikTok best-effort.
+1. Carrega a base (fonte de verdade = este repositório, via `carregar_base_dos_csv`).
+2. Coleta, cada fonte num script próprio que devolve `Post`/`Contador`:
+   - YouTube: Data API v3, no workflow (`yt_api`);
+   - TikTok: `coletar_tiktok.py`, endpoints de embed, sem sessão (`tk_embed`);
+   - Instagram: `coletar_instagram.py`, Chromium próprio com perfil logado —
+     grade da página + `/users/<uid>/info/` + `/media/<pk>/info/` (`ig_pagina`).
 3. `aplicar_posts` → `aplicar_contadores` → `aplicar_leituras` → `salvar`.
-4. Regenera o painel e publica.
+4. Regenera o painel e publica (Actions: token do workflow; Mac: `rodada_local.sh`).
+
+| | |
+|---|---|
+| `coletar_tiktok.py` | Coleta TikTok por embed. Roda no Actions e na rodada local. |
+| `coletar_instagram.py` | Coleta Instagram por navegador próprio. Só na rodada local. `--login` uma vez. |
+| `rodada_local.sh` | Rodada completa neste Mac: pull, coletas, painel, commit, push. |
+| `instalar_local.sh` | venv + Chromium + agente do launchd (11h00 e 18h10). |
+
+Operação, armadilhas e o caminho para a API oficial: `OPERACAO.md`.
 
 Janela de leituras: 7 dias. Fuso: America/Sao_Paulo (UTC-3).
