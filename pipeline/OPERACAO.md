@@ -22,6 +22,12 @@ zsh pipeline/instalar_local.sh                       # venv + Chromium + agente 
 zsh pipeline/rodada_local.sh                         # teste; log em ~/Library/Logs/MonitorSaturno/
 ```
 
+- **O repositório precisa ficar fora de Documentos, Mesa e Downloads** (fica em
+  `~/monitor`). O macOS bloqueia o launchd nessas pastas e o agente morre com
+  `can't open input file` antes de rodar uma linha — foi assim que o Instagram
+  ficou sem coleta de 11 a 14/09/2026 sem ninguém perceber. O instalador agora
+  recusa esses caminhos. Sinal no futuro: `~/Library/Logs/MonitorSaturno/launchd.err.log`
+  crescendo e nenhum `rodada-*.log` novo.
 - O perfil do navegador fica em `~/Library/Application Support/MonitorSaturno/chromium-profile`.
   É uma sessão separada da do Chrome de uso pessoal. Quando expirar, o log mostra
   `sessão expirada? rode --login` e a rodada segue só com TikTok.

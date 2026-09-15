@@ -10,7 +10,9 @@ name: Monitor Casa Saturno — rodada automática
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # 12:00 UTC = 9h de Brasília
+    - cron: "23 11 * * *"  # 11:23 UTC = 8h23 de Brasília. Fora da hora cheia de
+                           # proposito: em "0 12" o GitHub atrasou de 1h a 6h
+                           # (10 a 14/09/2026, disparos entre 13:00 e 17:53 UTC)
   workflow_dispatch:
 
 permissions:

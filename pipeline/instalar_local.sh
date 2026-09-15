@@ -9,6 +9,21 @@ set -eu
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 
+# O macOS nao deixa processos de fundo (launchd) lerem Documentos, Mesa e
+# Downloads sem permissao explicita: o agente falha com "can't open input file"
+# antes de rodar uma linha. Aconteceu de 10 a 14/09/2026 com o repo em
+# ~/Documents/monitor. Use ~/monitor ou outra pasta fora dessas tres.
+case "$REPO" in
+  "$HOME/Documents/"*|"$HOME/Desktop/"*|"$HOME/Downloads/"*)
+    echo "ERRO: o repositorio esta em $REPO. O launchd nao consegue ler Documentos/Mesa/Downloads."
+    echo "Mova para fora, por exemplo:  mv \"$REPO\" ~/monitor && cd ~/monitor && zsh pipeline/instalar_local.sh"
+    exit 1;;
+esac
+# venv nao e relocavel: se o repo mudou de lugar, recria
+if [ -x .venv/bin/python ] && ! .venv/bin/python -c "import sys" >/dev/null 2>&1; then
+  echo "venv aponta para caminho antigo — recriando"; rm -rf .venv
+fi
+
 if [ ! -x .venv/bin/python ]; then
   python3 -m venv .venv
 fi
