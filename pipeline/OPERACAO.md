@@ -42,6 +42,30 @@ O que mudou em 20/10:
 duas vezes seguidas no log; no painel, a última leitura de Instagram envelhecendo
 com o Actions verde.
 
+## Actions desde 20/10/2026: snapshots e alerta
+
+O workflow usa o mesmo desenho da rodada local: YouTube e TikTok gravam snapshot
+em `pipeline/_coleta/`, e o passo "Publicar" reaplica sobre `origin/main`, com
+até 3 tentativas se o push for recusado. O espelho do OneDrive (`ONEDRIVE_BASE_URL`)
+saiu do workflow: o link devolvia HTML em todas as execuções e a rodada local
+não escreve mais lá; a variável pode ser apagada.
+
+**Alerta de coleta parada.** Último passo do workflow, roda sempre. Lê a base
+publicada e mede a idade da última leitura por plataforma. Acima de 36 h
+(`LIMITE_HORAS`): abre ou atualiza a issue rotulada `coleta-parada` e falha o
+passo, o que deixa a execução vermelha e gera e-mail do GitHub para a conta.
+Quando a coleta volta, a issue é comentada e fechada sozinha. Teria detectado o
+buraco de 25/09 no dia 27.
+
+## Higiene pendente
+
+- Apagar o branch `resgate-local-2026-10-20` depois de 20/11/2026
+  (`git push origin --delete resgate-local-2026-10-20`).
+- Apagar a variável `ONEDRIVE_BASE_URL` nas configurações do repositório.
+- Encerrar a rotina antiga do Cowork, se ainda existir (ver "Rotina antiga").
+- API oficial do Instagram (camada 3): adiada em 20/10 porque nem todos os
+  artistas têm conta profissional. Enquanto isso o Instagram depende do Mac.
+
 ## Contadores de Instagram desde 23/09/2026
 
 `/api/v1/users/<uid>/info/` passou a responder **429** para a sessão e não voltou.
