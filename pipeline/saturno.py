@@ -346,10 +346,55 @@ def carregar_base_dos_csv(dir_csv, destino):
         if not os.path.exists(caminho):
             continue
         with open(caminho, encoding="utf-8") as f:
-            for i, linha in enumerate(csv.reader(f)):
-                ws.append([c if i == 0 else _valor(c) for c in linha])
+            texto = f.read()
+        # REGRA 6: BASE COM MARCADOR DE CONFLITO NAO E BASE. Em 25/09/2026 um
+        # `git pull --rebase` parou num conflito e deixou "<<<<<<< HEAD" dentro
+        # dos CSV; 38 rodadas seguintes carregaram isso como se fosse dado,
+        # geraram linhas-lixo e derrubaram o painel. Melhor parar aqui, alto.
+        for marcador in ("\n<<<<<<< ", "\n=======\n", "\n>>>>>>> "):
+            if marcador in texto:
+                raise ValueError("%s contem marcador de conflito do git (%r) — "
+                                 "resolva o repositorio antes de rodar" % (caminho, marcador.strip()))
+        import io
+        for i, linha in enumerate(csv.reader(io.StringIO(texto))):
+            ws.append([c if i == 0 else _valor(c) for c in linha])
     wb.save(destino)
     return destino
+
+
+# ---------------------------------------------------------------- snapshots
+
+def salvar_snapshot(caminho, posts, contadores, coleta, hoje, origem=""):
+    """Grava o resultado de uma coleta em JSON, ANTES de tocar na base.
+
+    Por que existe: em 25/09/2026 a rodada local aplicou direto na base, o
+    `git pull --rebase` conflitou com a rodada do Actions e 38 rodadas ficaram
+    presas num rebase pela metade. Com o snapshot, a coleta e a publicacao se
+    separam: publicar vira "reaplicar os snapshots pendentes sobre a base mais
+    recente", quantas vezes for preciso, sem merge de CSV.
+    """
+    import json
+    d = {"coleta": coleta, "hoje": hoje, "origem": origem,
+         "posts": [{k: getattr(p, k) for k in Post.__slots__} for p in posts],
+         "contadores": [dict(chave=list(k), **{a: getattr(c, a) for a in Contador.__slots__})
+                        for k, c in (contadores or {}).items()]}
+    os.makedirs(os.path.dirname(os.path.abspath(caminho)), exist_ok=True)
+    with open(caminho, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False)
+    return caminho
+
+
+def carregar_snapshot(caminho):
+    """Devolve (coleta, hoje, posts, contadores) de um snapshot JSON."""
+    import json
+    with open(caminho, encoding="utf-8") as f:
+        d = json.load(f)
+    posts = [Post(**p) for p in d["posts"]]
+    cont = {}
+    for c in d.get("contadores", []):
+        c = dict(c); k = tuple(c.pop("chave"))
+        cont[k] = Contador(**c)
+    return d["coleta"], d["hoje"], posts, cont
 
 
 # ---------------------------------------------------------------- helpers

@@ -9,7 +9,9 @@ ws=wb["Posts"]
 posts=[]
 for r in range(2, ws.max_row+1):
     a=ws.cell(row=r,column=1).value
-    if not a: continue
+    # linha sem artista ou sem plataforma conhecida nao e post — e lixo de
+    # conflito/merge; nao pode derrubar o painel inteiro
+    if not a or ws.cell(row=r,column=2).value not in ("YouTube","Instagram","TikTok"): continue
     posts.append({"a":a,"p":ws.cell(row=r,column=2).value,
         "d":str(ws.cell(row=r,column=3).value)[:10],"h":str(ws.cell(row=r,column=4).value)[:5],
         "t":ws.cell(row=r,column=5).value,"id":ws.cell(row=r,column=6).value,

@@ -78,6 +78,23 @@ JS_GRADE = r"""
 }
 """
 
+# Contadores pelo cabecalho da pagina. O endpoint /users/<uid>/info/ passou a
+# responder 429 para esta sessao em 23/09/2026 e nunca mais voltou; o cabecalho
+# traz o numero EXATO de seguidores no atributo title ("656.526" onde o texto
+# diz "656 mil") e o total de posts no texto. Validado em 20/10/2026.
+JS_CABECALHO = r"""
+() => {
+  const main = document.querySelector('main') || document.body;
+  const h = main.querySelector('header') || main;
+  const t = [...h.querySelectorAll('[title]')].map(e => e.getAttribute('title'))
+              .map(v => (v || '').replace(/[.,\s]/g, '')).filter(v => /^\d+$/.test(v));
+  const txt = (h.innerText || '').replace(/\s+/g, ' ');
+  const m = txt.match(/(\d[\d.,]*)\s*(posts|publica)/i);
+  return {seguidores: t.length ? parseInt(t[0], 10) : null,
+          posts: m ? parseInt(m[1].replace(/[.,]/g, ''), 10) : null, txt: txt.slice(0, 80)};
+}
+"""
+
 JS_FETCH_JSON = r"""
 async (url) => {
   const r = await fetch(url, {credentials: 'include',
@@ -148,14 +165,20 @@ def coletar(perfis, log=print, limite_perfis=None, headless=True):
                                   % (handle, (grade or {}).get("titulo") or page.url))
                     log("AVISO " + falhas[-1]); continue
 
-                # contadores exatos
-                if uid:
+                # contadores exatos: cabecalho primeiro (nao gasta cota), endpoint como reserva
+                cab = {}
+                try:
+                    cab = page.evaluate(JS_CABECALHO) or {}
+                except Exception as e:
+                    log("   cabecalho %s: %s" % (handle, e))
+                seg, tot = cab.get("seguidores"), cab.get("posts")
+                if seg is None and uid:
                     r = page.evaluate(JS_FETCH_JSON, "/api/v1/users/%s/info/" % uid)
                     u = ((r.get("json") or {}).get("user") or {}) if r.get("ok") else {}
-                    if u.get("follower_count") is not None:
-                        contadores[(artista, "Instagram")] = Contador(
-                            artista, "Instagram", handle,
-                            seguidores=u["follower_count"], posts=u.get("media_count"), medido=True)
+                    seg, tot = u.get("follower_count"), u.get("media_count", tot)
+                if seg is not None:
+                    contadores[(artista, "Instagram")] = Contador(
+                        artista, "Instagram", handle, seguidores=seg, posts=tot, medido=True)
 
                 n = 0
                 for it in grade["itens"]:
@@ -209,6 +232,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--headed", action="store_true", help="mostra a janela (diagnóstico)")
     ap.add_argument("--perfis", type=int, default=None)
+    ap.add_argument("--snapshot", default=None, help="grava a coleta neste JSON antes de aplicar")
+    ap.add_argument("--nao-aplicar", action="store_true", help="so coleta (e grava o snapshot); nao toca na base")
     a = ap.parse_args()
     if a.login:
         login(); return 0
@@ -227,6 +252,11 @@ def main():
         return 0 if not falhas else 1
     if not posts and not contadores:
         print("nada coletado — base inalterada"); return 1
+    if a.snapshot:
+        saturno.salvar_snapshot(a.snapshot, posts, contadores, COLETA, HOJE, origem="instagram")
+        print("snapshot:", a.snapshot)
+    if a.nao_aplicar:
+        return 0 if not falhas else 2
 
     if not os.path.exists(a.base):
         saturno.carregar_base_dos_csv(a.csv, a.base)

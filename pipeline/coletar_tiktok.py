@@ -44,7 +44,7 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")
 BLOB = re.compile(r'<script id="__FRONTITY_CONNECT_STATE__" type="application/json">(.*?)</script>', re.S)
 PAUSA = 0.6          # segundos entre requisições — 9 perfis x ~13 chamadas
-TENTATIVAS = 3
+TENTATIVAS = 4       # o embed devolve 503 intermitente (76 vezes em 25 dias); 4 tentativas com espera crescente
 
 # registra a fonte no núcleo (regra 1: a fonte decide o que pode gravar)
 saturno.FONTES.setdefault("tk_embed", {"views": True, "leituras": True})
@@ -65,7 +65,7 @@ def _get(url, sessao):
             ultimo = "HTTP %s sem blob (%d bytes)" % (r.status_code, len(r.text))
         except Exception as e:                       # rede, JSON, timeout
             ultimo = str(e)
-        time.sleep(2 + 3 * i)
+        time.sleep(3 + 5 * i)
     raise EmbedIndisponivel("%s -> %s" % (url, ultimo))
 
 
@@ -156,6 +156,8 @@ def main():
     ap.add_argument("--perfis", type=int, default=None)
     ap.add_argument("--sem-contadores", action="store_true",
                     help="não toca na aba Contadores (útil se outra rodada do dia vai medir)")
+    ap.add_argument("--snapshot", default=None, help="grava a coleta neste JSON antes de aplicar")
+    ap.add_argument("--nao-aplicar", action="store_true", help="so coleta (e grava o snapshot); nao toca na base")
     a = ap.parse_args()
 
     agora = datetime.datetime.now(TZ)
@@ -171,7 +173,13 @@ def main():
         return 0
     if not posts and not contadores:
         print("nada coletado — base inalterada")
-        return 0
+        return 1
+    if a.snapshot:
+        saturno.salvar_snapshot(a.snapshot, posts, {} if a.sem_contadores else contadores,
+                                COLETA, HOJE, origem="tiktok")
+        print("snapshot:", a.snapshot)
+    if a.nao_aplicar:
+        return 0 if not falhas else 2
 
     if not os.path.exists(a.base):
         saturno.carregar_base_dos_csv(a.csv, a.base)

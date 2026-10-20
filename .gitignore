@@ -6,3 +6,6 @@ pipeline/base_atual.xlsx
 pipeline/_regen_run.py
 pipeline/painel_casa_saturno.html
 pipeline/index.html
+
+# snapshots de coleta pendentes de publicacao (rodada_local.sh)
+pipeline/_coleta/
