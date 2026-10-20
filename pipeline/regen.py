@@ -83,7 +83,13 @@ lanc.sort(key=lambda x: -(x["m"][0] or 0))
 
 data=json.dumps({"coleta":COLETA,"posts":posts,"contadores":cont,"saude":saude,"lanc":lanc},ensure_ascii=False)
 tpl=open("painel_template.html").read()
-html=tpl.replace("__DATA__",data)
+# Saturno DS vendorizado em ds/ (ver ds/saturno.css, cabecalho com a versao):
+# o CSS e os ativos sao inlinados aqui para o painel continuar um arquivo unico.
+ds_css=open("ds/saturno.css",encoding="utf-8").read()
+ds_logo=open("ds/logo-casa-saturno.svg",encoding="utf-8").read().replace("<svg ",'<svg class="logo" ',1)
+ds_hero=open("ds/hero.html",encoding="utf-8").read()
+html=(tpl.replace("/*__SATURNO_CSS__*/",ds_css).replace("<!--__LOGO__-->",ds_logo)
+         .replace("__HERO__",ds_hero.replace("`","\\`")).replace("__DATA__",data))
 html=re.sub(r'const HOJE = "[0-9-]+";', f'const HOJE = "{HOJE}";', html)
 open("painel_casa_saturno.html","w").write(html)
 open("index.html","w").write(html)
