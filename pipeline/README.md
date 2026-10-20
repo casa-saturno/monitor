@@ -9,7 +9,8 @@ Instagram e TikTok. Alimenta o painel em https://casa-saturno.github.io/monitor/
 |---|---|
 | `saturno.py` | Núcleo: upsert, contadores, leituras, export CSV. **As regras de integridade vivem aqui**, não em prompt. |
 | `regen.py` | Gera `index.html` a partir da base + `painel_template.html`. |
-| `painel_template.html` | Template do painel (placeholder `__DATA__`). |
+| `painel_template.html` | Template do painel (placeholders `__DATA__`, `/*__SATURNO_CSS__*/`, `<!--__LOGO__-->`, `__HERO__`). |
+| `ds/` | Cópia vendorizada do **Saturno DS** (padrão visual das apps da Casa): `saturno.css` v1.0, logo, planeta, herói. Fonte canônica: `casa-saturno/saturno-ds`. Para atualizar, copie de lá e anote a versão no commit. |
 | `base/*.csv` | Espelho versionado da base (diff legível, histórico auditável). |
 
 ## Regras de integridade (por que existem)
