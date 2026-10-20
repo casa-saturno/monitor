@@ -14,6 +14,42 @@ Quem faz o quê, o que já quebrou e como voltar atrás. Atualizado em 09/09/202
 A rodada local também roda o coletor de TikTok, para o painel das 11h e das 18h
 ter TikTok fresco, não só o das 9h.
 
+## Incidente de 25/09 a 20/10/2026 — publicação parada por rebase inacabado
+
+Em 25/09 às 13h46 a rodada local commitou e fez `git pull --rebase` no momento em
+que o Actions também tinha escrito na base. O rebase parou num conflito dentro dos
+CSV e o script, que tratava falha de pull como aviso, seguiu. Resultado: 38 rodadas
+seguintes rodaram fora do branch, sobre CSVs com `<<<<<<< HEAD`, commitaram
+localmente e nunca publicaram; o painel ficou 26 dias sem Instagram enquanto o
+log dizia "instagram rc=0". Ninguém viu porque o Actions seguia verde.
+
+O que mudou em 20/10:
+- **Coletar e publicar são etapas separadas.** Cada coletor grava um snapshot JSON
+  em `pipeline/_coleta/` (`--snapshot`, `--nao-aplicar`). Publicar é
+  `aplicar_snapshots.py` sobre a base recém-baixada de `origin/main`, painel,
+  commit, push; push recusado → volta para `origin/main` e reaplica. Snapshot só
+  é apagado depois de publicado: rodada offline publica na seguinte.
+- **A rodada começa igualando o repo a `origin/main`**, abortando qualquer rebase
+  ou merge pela metade. A verdade é o remoto; nada local merece sobreviver a isso.
+- **`carregar_base_dos_csv` recusa CSV com marcador de conflito** (regra 6) e
+  `regen.py` ignora linha sem plataforma válida em vez de derrubar o painel.
+- Os dados presos foram resgatados do branch `resgate-local-2026-10-20`
+  (371 posts novos, 211 atualizados, 4.201 leituras em 24 dias). O branch pode ser
+  apagado depois de um mês.
+
+**Sinais para detectar de novo:** `git status` do repo fora de `main`;
+`pipeline/_coleta/` acumulando snapshots; "FALHA ao publicar" ou "push recusado"
+duas vezes seguidas no log; no painel, a última leitura de Instagram envelhecendo
+com o Actions verde.
+
+## Contadores de Instagram desde 23/09/2026
+
+`/api/v1/users/<uid>/info/` passou a responder **429** para a sessão e não voltou.
+Desde 20/10 os seguidores vêm do **cabeçalho da página**: o atributo `title` do
+contador traz o número exato (656.526 onde o texto mostra "656 mil"); o total de
+posts vem do texto. O endpoint fica como reserva. Entre 23/09 e 20/10 os
+contadores de Instagram ficaram em `carry`.
+
 ## Rodada local — instalação e manutenção (09/09/2026)
 
 ```

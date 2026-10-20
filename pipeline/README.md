@@ -61,7 +61,8 @@ Instagram e TikTok. Alimenta o painel em https://casa-saturno.github.io/monitor/
 |---|---|
 | `coletar_tiktok.py` | Coleta TikTok por embed. Roda no Actions e na rodada local. |
 | `coletar_instagram.py` | Coleta Instagram por navegador próprio. Só na rodada local. `--login` uma vez. |
-| `rodada_local.sh` | Rodada completa neste Mac: pull, coletas, painel, commit, push. |
+| `aplicar_snapshots.py` | Reaplica snapshots JSON de coleta (`pipeline/_coleta/`) sobre a base. |
+| `rodada_local.sh` | Rodada completa neste Mac: repo = origin/main, coletas → snapshots, aplicar, painel, commit, push (com repetição). |
 | `instalar_local.sh` | venv + Chromium + agente do launchd (11h00 e 18h10). |
 
 Operação, armadilhas e o caminho para a API oficial: `OPERACAO.md`.
