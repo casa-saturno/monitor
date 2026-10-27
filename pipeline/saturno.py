@@ -221,9 +221,31 @@ class Base:
                                 ws.cell(row=r, column=self._col_origem).value)
             if d == hoje:
                 linha_hoje[k] = r
+        # handles ainda cadastrados (Perfis, Monitorar? = Sim). Um handle que saiu
+        # do cadastro (ex.: @reservaoikaka trocado por @oiikaka___ em 27/10/2026)
+        # mantem o historico, mas nao ganha linha de carry nova todo dia.
+        monitorados = None
+        if "Perfis" in self.wb.sheetnames:
+            wp = self.wb["Perfis"]; cab = [c.value for c in wp[1]]
+            try:
+                ia, ip_, ih, im = (cab.index("Artista"), cab.index("Plataforma"),
+                                   cab.index("Handle"), cab.index("Monitorar?"))
+                monitorados = set()
+                for r in range(2, wp.max_row + 1):
+                    if wp.cell(row=r, column=im + 1).value == "Sim":
+                        monitorados.add((wp.cell(row=r, column=ia + 1).value,
+                                         wp.cell(row=r, column=ip_ + 1).value,
+                                         str(wp.cell(row=r, column=ih + 1).value or "").lstrip("@")))
+            except ValueError:
+                monitorados = None
         for k, v in ultimo.items():
             m = medidos.get((k[0], k[1]))
+            if m and str(m.handle or "").lstrip("@") != str(k[2] or "").lstrip("@"):
+                m = None            # medicao e de outro handle do mesmo artista
             r_hoje = linha_hoje.get(k)
+            if not m and monitorados is not None and (k[0], k[1], str(k[2] or "").lstrip("@")) not in monitorados:
+                self.stats["contadores_aposentados"] += 1
+                continue
             if r_hoje and not m:
                 # ja ha linha de hoje e nada novo foi medido: nao rebaixa
                 self.stats["contadores_preservados"] += 1

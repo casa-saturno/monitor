@@ -30,7 +30,10 @@ for r in range(2, ws.max_row+1):
     k=(ws.cell(row=r,column=2).value,ws.cell(row=r,column=3).value,ws.cell(row=r,column=4).value)
     if k not in snap or d>=snap[k][0]:
         snap[k]=(d,ws.cell(row=r,column=5).value,ws.cell(row=r,column=6).value,ws.cell(row=r,column=7).value)
-cont=[{"a":k[0],"p":k[1],"h":k[2],"seg":v[1],"tot":v[2],"lk":v[3]} for k,v in snap.items() if v[1]]
+# so contadores com snapshot recente: um handle aposentado (ex.: @reservaoikaka)
+# para de receber linhas e some do painel em 7 dias, em vez de ficar para sempre
+lim_cont=(datetime.strptime(HOJE,"%Y-%m-%d")-timedelta(days=7)).strftime("%Y-%m-%d")
+cont=[{"a":k[0],"p":k[1],"h":k[2],"seg":v[1],"tot":v[2],"lk":v[3]} for k,v in snap.items() if v[1] and v[0]>=lim_cont]
 
 # ---- saude da coleta: por plataforma, quando foi a ultima leitura de verdade ----
 saude=[]
