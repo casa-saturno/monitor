@@ -273,6 +273,22 @@ class Base:
             cl.font = _B; cl.border = _BD
             for c in (5, 6, 7):
                 ws.cell(row=r, column=c).number_format = "#,##0"
+        # handle NOVO (ainda sem serie na base): a primeira medicao abre a serie.
+        # Antes disso so entravam series semeadas a mao; a troca de @reservaoikaka
+        # por @oiikaka___ em 27/10/2026 mediu 173.530 seguidores e descartou.
+        existentes = {(k[0], k[1], str(k[2] or "").lstrip("@")) for k in ultimo}
+        for (artista, plataforma), m in medidos.items():
+            h = str(m.handle or "").lstrip("@")
+            if not h or (artista, plataforma, h) in existentes or m.seguidores is None:
+                continue
+            r = ws.max_row + 1
+            for c, val in enumerate([hoje, artista, plataforma, h, m.seguidores, m.posts, m.likes], start=1):
+                cl = ws.cell(row=r, column=c, value=val); cl.font = _B; cl.border = _BD
+            cl = ws.cell(row=r, column=self._col_origem, value="medido"); cl.font = _B; cl.border = _BD
+            for c in (5, 6, 7):
+                ws.cell(row=r, column=c).number_format = "#,##0"
+            self.stats["contadores_medidos"] += 1
+            self.stats["contadores_series_novas"] += 1
 
     # -- leituras ----------------------------------------------------------
     def aplicar_leituras(self, posts, coleta, hoje):
